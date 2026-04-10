@@ -7,16 +7,16 @@ export default {
     extend: {
       colors: {
         brand: {
-          50: '#f1f8ff',
-          100: '#e1f0ff',
-          200: '#b9d8ff',
-          300: '#88bbff',
-          400: '#4b95ff',
-          500: '#1f6eff',
-          600: '#1553d6',
-          700: '#123f9f',
-          800: '#102f73',
-          900: '#0d2458'
+          50:  '#fff1f3',
+          100: '#ffe4e8',
+          200: '#fecdd5',
+          300: '#fda4b1',
+          400: '#fb718a',
+          500: '#ff2a54',  // logo rose-red
+          600: '#e11d48',  // slightly darker – white text passes WCAG AA
+          700: '#be123c',
+          800: '#9f1239',
+          900: '#881337',
         },
         verdict: {
           likely: '#0f9d58',
@@ -25,7 +25,7 @@ export default {
         }
       },
       boxShadow: {
-        card: '0 10px 30px -15px rgba(16,47,115,0.25)'
+        card: '0 10px 30px -15px rgba(255,42,84,0.20)'
       },
       keyframes: {
         'fade-in': {

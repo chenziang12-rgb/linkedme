@@ -1,6 +1,6 @@
-# Contributing to CTO
+# Contributing to LinkedMe
 
-Thank you for your interest in contributing to CTO! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to LinkedMe! This document provides guidelines and instructions for contributing.
 
 ## Development Setup
 

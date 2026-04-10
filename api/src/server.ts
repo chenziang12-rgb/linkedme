@@ -21,7 +21,8 @@ import { handleGenerateOutreach } from './hrOutreach.js';
 import type { AssessmentInput, PlanTier, User } from './types.js';
 import { requireAuth, optionalAuth } from './middleware/auth.js';
 import { supabaseAdmin } from './supabase.js';
-import { fetchExternalJobs, filterJobs } from './jobs/external.js';
+import { fetchExternalJobs, filterJobs, areJobEmbeddingsReady } from './jobs/external.js';
+import { generateEmbedding, cosineSimilarity } from './embeddings.js';
 import { getMatchingJD } from './jobs/mockJDs.js';
 import { fetchJobDescription, isInternSGCompany } from './jobs/jdFetcher.js';
 
@@ -382,124 +383,90 @@ export async function buildServer(): Promise<express.Express> {
 
   router.get('/jobs', optionalAuth, async (req, res, next) => {
     try {
-      // Fetch jobs from external API
       const externalJobs = await fetchExternalJobs();
-      
-      // Parse pagination parameters
+
       const page = req.query.page ? Number.parseInt(req.query.page as string, 10) : 1;
       const pageSize = req.query.pageSize ? Number.parseInt(req.query.pageSize as string, 10) : 50;
-      const tags = typeof req.query.tags === 'string' ? req.query.tags : undefined;
-      const company = typeof req.query.company === 'string' ? req.query.company : undefined;
-      
-      // Apply filters (but don't limit yet - we need total count)
+      const searchQuery = typeof req.query.search === 'string' ? req.query.search : undefined;
+
+      // Generate query embedding for semantic search (if embeddings are ready)
+      let searchEmbedding: number[] | undefined;
+      if (searchQuery && areJobEmbeddingsReady()) {
+        try {
+          searchEmbedding = await generateEmbedding(searchQuery);
+        } catch (err) {
+          logger.warn({ err }, 'Search embedding failed, falling back to keyword search');
+        }
+      }
+
       const filtered = filterJobs(externalJobs, {
-        search: typeof req.query.search === 'string' ? req.query.search : undefined,
+        search: searchQuery,
+        searchEmbedding,
         location: typeof req.query.location === 'string' ? req.query.location : undefined,
         industry: typeof req.query.industry === 'string' ? req.query.industry : undefined,
-        tags: tags,
-        company: company,
-        limit: undefined // Don't apply limit in filter function
+        tags: typeof req.query.tags === 'string' ? req.query.tags : undefined,
+        company: typeof req.query.company === 'string' ? req.query.company : undefined,
       });
 
-      // Get user profile for scoring if authenticated
-      let userProfile: Partial<User> | null = null;
+      // Fetch user profile + preferences if authenticated
+      let userSkills: string[] = [];
       let userPreferences: { confirmed_industries?: string[]; confirmed_roles?: string[]; confirmed_companies?: string[] } | null = null;
-      
+
       if (req.user) {
-        const { data } = await supabaseAdmin
+        const { data: profileData } = await supabaseAdmin
           .from('profiles')
-          .select('*')
+          .select('skills')
           .eq('id', req.user.id)
           .single();
-        
-        if (data) {
-          userProfile = {
-            id: data.id,
-            name: data.name,
-            educationLevel: data.education_level,
-            educationInstitution: data.education_institution,
-            certifications: data.certifications,
-            yearsExperience: data.years_experience,
-            skills: data.skills || [],
-            expectedSalarySGD: data.expected_salary_sgd,
-            plan: data.plan || 'freemium'
-          };
-        }
-        
-        // Fetch user preferences for smart sorting
+        if (profileData) userSkills = profileData.skills || [];
+
         const { data: prefsData } = await supabaseAdmin
           .from('user_preferences')
           .select('confirmed_industries, confirmed_roles, confirmed_companies')
           .eq('user_id', req.user.id)
           .single();
-        
-        if (prefsData) {
-          userPreferences = prefsData;
+        if (prefsData) userPreferences = prefsData;
+      }
+
+      // Build profile embedding for semantic preference scoring
+      let profileEmbedding: number[] | undefined;
+      if (userPreferences && areJobEmbeddingsReady()) {
+        const parts = [
+          userPreferences.confirmed_roles?.length ? `Roles: ${userPreferences.confirmed_roles.join(', ')}` : '',
+          userPreferences.confirmed_industries?.length ? `Industries: ${userPreferences.confirmed_industries.join(', ')}` : '',
+          userPreferences.confirmed_companies?.length ? `Companies: ${userPreferences.confirmed_companies.join(', ')}` : '',
+          userSkills.length ? `Skills: ${userSkills.join(', ')}` : '',
+        ].filter(Boolean).join('. ');
+
+        if (parts) {
+          try {
+            profileEmbedding = await generateEmbedding(parts);
+          } catch (err) {
+            logger.warn({ err }, 'Profile embedding failed, skipping semantic scoring');
+          }
         }
       }
 
-      // Map jobs to include requirements field (for frontend compatibility)
-      const mappedJobs = filtered.map(job => ({
+      // Attach semantic score and map tags → requirements for frontend
+      const scoredJobs = filtered.map((job) => ({
         ...job,
-        requirements: job.tags, // Map tags to requirements for frontend
+        requirements: job.tags,
+        semanticScore: profileEmbedding && job.embedding
+          ? cosineSimilarity(profileEmbedding, job.embedding)
+          : undefined,
       }));
 
-      // Sort by preference matches if user has preferences
-      let sortedJobs = mappedJobs;
-      if (userPreferences && (userPreferences.confirmed_industries?.length || userPreferences.confirmed_roles?.length || userPreferences.confirmed_companies?.length)) {
-        const roles = userPreferences.confirmed_roles || [];
-        const companies = userPreferences.confirmed_companies || [];
-        const industries = userPreferences.confirmed_industries || [];
-        
-        sortedJobs = mappedJobs.map(job => {
-          let matchCount = 0;
-          
-          // Check title matches role
-          if (roles.some(role => 
-            role.toLowerCase().includes(job.title.toLowerCase()) || 
-            job.title.toLowerCase().includes(role.toLowerCase())
-          )) {
-            matchCount++;
-          }
-          
-          // Check company matches
-          if (companies.some(comp => 
-            comp.toLowerCase().includes(job.company.toLowerCase()) || 
-            job.company.toLowerCase().includes(comp.toLowerCase())
-          )) {
-            matchCount++;
-          }
-          
-          // Check tags/requirements match industry
-          if (industries.some(industry => 
-            (job.tags || []).some(tag => 
-              industry.toLowerCase().includes(tag.toLowerCase()) || 
-              tag.toLowerCase().includes(industry.toLowerCase())
-            )
-          )) {
-            matchCount++;
-          }
-          
-          // Check job industry matches
-          if (job.industry && industries.some(industry => 
-            industry.toLowerCase().includes(job.industry!.toLowerCase()) || 
-            job.industry!.toLowerCase().includes(industry.toLowerCase())
-          )) {
-            matchCount++;
-          }
-          
-          return { ...job, matchCount };
-        }).sort((a, b) => b.matchCount - a.matchCount);
-      }
+      // Sort by semantic score when no active search (search results already ranked by similarity)
+      const sortedJobs = profileEmbedding && !searchQuery
+        ? [...scoredJobs].sort((a, b) => (b.semanticScore ?? 0) - (a.semanticScore ?? 0))
+        : scoredJobs;
 
-      // Apply pagination
       const total = sortedJobs.length;
       const startIndex = (page - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedItems = sortedJobs.slice(startIndex, endIndex);
+      const paginatedItems = sortedJobs.slice(startIndex, startIndex + pageSize);
 
-      res.json({ 
-        items: paginatedItems, 
+      res.json({
+        items: paginatedItems,
         total,
         page,
         pageSize,

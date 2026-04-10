@@ -49,6 +49,7 @@ export interface Job {
   isInternSG?: boolean;
   hrName?: string;
   source?: string;
+  semanticScore?: number; // RAG cosine similarity to user profile (0–1)
 }
 
 export type CompassVerdict = 'Likely' | 'Borderline' | 'Unlikely';

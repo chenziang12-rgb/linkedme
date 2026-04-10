@@ -16,14 +16,14 @@ export default function TermsOfService(): JSX.Element {
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-slate-900 mb-3">1. Acceptance of Terms</h2>
               <p className="text-slate-600 mb-4">
-                By accessing and using CTO (Chief Talent Officer), you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to these terms, please do not use our service.
+                By accessing and using LinkedMe, you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to these terms, please do not use our service.
               </p>
             </section>
 
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-slate-900 mb-3">2. Description of Service</h2>
               <p className="text-slate-600 mb-4">
-                CTO is an AI-powered job matching platform that helps users find relevant job opportunities and create personalized application materials. Our service includes:
+                LinkedMe is an AI-powered job matching platform that helps users find relevant job opportunities and create personalized application materials. Our service includes:
               </p>
               <ul className="list-disc pl-6 text-slate-600 space-y-2 mb-4">
                 <li>Job recommendations based on your profile and preferences</li>
@@ -43,7 +43,7 @@ export default function TermsOfService(): JSX.Element {
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-slate-900 mb-3">4. User Content</h2>
               <p className="text-slate-600 mb-4">
-                You retain ownership of all content you upload to CTO, including resumes, project information, and other professional materials. By uploading content, you grant us a license to use, store, and process this content solely for the purpose of providing our services to you.
+                You retain ownership of all content you upload to LinkedMe, including resumes, project information, and other professional materials. By uploading content, you grant us a license to use, store, and process this content solely for the purpose of providing our services to you.
               </p>
             </section>
 
@@ -85,7 +85,7 @@ export default function TermsOfService(): JSX.Element {
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-slate-900 mb-3">9. Limitation of Liability</h2>
               <p className="text-slate-600 mb-4">
-                To the maximum extent permitted by law, CTO shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the service.
+                To the maximum extent permitted by law, LinkedMe shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the service.
               </p>
             </section>
 

@@ -80,9 +80,9 @@ export default function App(): JSX.Element {
             <div className="flex items-center justify-between px-4 py-3 sm:py-4 w-full relative">
               <div className="flex items-center space-x-3 flex-shrink-0">
                 <Link to="/" className="flex items-center">
-                  <img src="/android-chrome-192x192.png" alt="CTO" className="w-7 h-7 sm:w-8 sm:h-8" />
+                  <img src="/linkedme-full.svg" alt="LinkedMe" className="hidden sm:block h-8 w-auto" />
+                  <img src="/linkedme-icon.svg" alt="LinkedMe" className="sm:hidden h-7 w-7" />
                 </Link>
-                <p className="hidden sm:block text-xs text-slate-500">Your Personal Chief Talent Officer</p>
               </div>
 
               {/* Desktop Navigation */}
@@ -276,7 +276,7 @@ export default function App(): JSX.Element {
         {user && (
           <footer className="border-t bg-white flex-shrink-0">
             <div className="px-4 py-2 text-sm text-slate-500 w-full">
-              &copy; {new Date().getFullYear()} CTO — Your Personal Chief Talent Officer.
+              &copy; {new Date().getFullYear()} LinkedMe.
             </div>
           </footer>
         )}

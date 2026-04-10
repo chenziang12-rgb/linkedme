@@ -1,8 +1,8 @@
-# CTO — Chief Talent Officer
+# LinkedMe
 
-CTO is a context-aware career copilot that constructs a unified knowledge base from every artifact you share — resumes, LinkedIn, GitHub, market research, recruiter notes, and more. That shared profile lets the product extract the right wins for each job description, tailor outreach, and keep HR conversations cohesive. Under the hood, a Vite/React experience (`/web`) talks to an Express + TypeScript API (`/api`) that ingests sources, normalizes context, and orchestrates secure storage.
+LinkedMe is a context-aware career copilot that constructs a unified knowledge base from every artifact you share — resumes, LinkedIn, GitHub, market research, recruiter notes, and more. That shared profile lets the product extract the right wins for each job description, tailor outreach, and keep HR conversations cohesive. Under the hood, a Vite/React experience (`/web`) talks to an Express + TypeScript API (`/api`) that ingests sources, normalizes context, and orchestrates secure storage.
 
-## Why CTO?
+## Why LinkedMe?
 
 - **Unified knowledge base** – Aggregate every document into Supabase-backed context so the AI always “remembers” the candidate.
 - **Immediate personalization** – Use that shared profile to tailor resumes, cover letters, and HR messages for each JD automatically.
@@ -122,4 +122,4 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 ---
 
-Happy shipping with your personal Chief Talent Officer. 🚀
+Happy shipping with LinkedMe. 🚀

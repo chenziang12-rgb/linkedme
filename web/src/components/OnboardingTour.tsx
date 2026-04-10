@@ -85,64 +85,55 @@ export default function OnboardingTour({ steps, isActive, onComplete, onSkip, on
       }
 
       const modalWidth = 384;
-      const modalHeight = 200;
+      const modalHeight = 220;
       const padding = 16;
+
+      // Use viewport-relative coordinates directly (fixed positioning, no scroll offset needed)
       let top = 0;
       let left = 0;
 
-      // Calculate position based on step preference
       switch (step.position) {
         case 'bottom':
-          top = rect.bottom + window.scrollY + padding;
-          left = rect.left + window.scrollX + rect.width / 2;
+          top = rect.bottom + padding;
+          left = rect.left + rect.width / 2;
           break;
         case 'top':
-          top = rect.top + window.scrollY - padding - modalHeight;
-          left = rect.left + window.scrollX + rect.width / 2;
+          top = rect.top - padding - modalHeight;
+          left = rect.left + rect.width / 2;
           break;
         case 'right':
-          top = rect.top + window.scrollY + rect.height / 2;
-          left = rect.right + window.scrollX + padding;
+          top = rect.top + rect.height / 2 - modalHeight / 2;
+          left = rect.right + padding;
           break;
         case 'left':
-          top = rect.top + window.scrollY + rect.height / 2;
-          left = rect.left + window.scrollX - padding - modalWidth;
+          top = rect.top + rect.height / 2 - modalHeight / 2;
+          left = rect.left - padding - modalWidth;
           break;
       }
 
-      // Keep modal within viewport bounds
+      // Clamp to viewport
       const minLeft = padding;
       const maxLeft = window.innerWidth - padding;
-      const minTop = window.scrollY + padding;
-      const maxTop = window.scrollY + window.innerHeight - padding;
+      const minTop = padding;
+      const maxTop = window.innerHeight - padding;
 
-      // Clamp horizontal position
-      if (left - modalWidth / 2 < minLeft) {
-        left = minLeft + modalWidth / 2;
-      } else if (left + modalWidth / 2 > maxLeft) {
-        left = maxLeft - modalWidth / 2;
-      }
+      if (left - modalWidth / 2 < minLeft) left = minLeft + modalWidth / 2;
+      else if (left + modalWidth / 2 > maxLeft) left = maxLeft - modalWidth / 2;
 
-      // Clamp vertical position
-      const modalTop = step.position === 'top' ? top : 
-                      step.position === 'bottom' ? top :
-                      top - modalHeight / 2;
-      
-      if (modalTop < minTop) {
-        top = minTop + (step.position === 'left' || step.position === 'right' ? modalHeight / 2 : 0);
-      } else if (modalTop + modalHeight > maxTop) {
-        top = maxTop - modalHeight + (step.position === 'left' || step.position === 'right' ? -modalHeight / 2 : 0);
-      }
+      if (top < minTop) top = minTop;
+      else if (top + modalHeight > maxTop) top = maxTop - modalHeight;
 
       setPosition({ top, left });
       element.classList.add('tour-highlight');
     };
 
-    updatePosition();
+    // Small delay to let the DOM settle (especially when a mobile tab just changed)
+    const timer = setTimeout(updatePosition, 50);
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition, true);
 
     return () => {
+      clearTimeout(timer);
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
       
@@ -171,54 +162,20 @@ export default function OnboardingTour({ steps, isActive, onComplete, onSkip, on
     }
   };
 
-  const getModalPosition = () => {
-    const baseStyle: React.CSSProperties = {
-      position: 'absolute',
-      zIndex: 9999,
-    };
-
-    // Mobile: fixed position at bottom
+  const getModalPosition = (): React.CSSProperties => {
+    // Mobile: fixed at bottom
     if (isMobile) {
-      return {
-        position: 'fixed' as const,
-        bottom: '16px',
-        left: '16px',
-        right: '16px',
-        zIndex: 9999,
-      };
+      return { position: 'fixed', bottom: '16px', left: '16px', right: '16px', zIndex: 9999 };
     }
 
-    // Desktop: positioned relative to target element
-    switch (step.position) {
-      case 'bottom':
-        return {
-          ...baseStyle,
-          top: `${position.top}px`,
-          left: `${position.left}px`,
-          transform: 'translateX(-50%)',
-        };
-      case 'top':
-        return {
-          ...baseStyle,
-          top: `${position.top}px`,
-          left: `${position.left}px`,
-          transform: 'translateX(-50%)',
-        };
-      case 'right':
-        return {
-          ...baseStyle,
-          top: `${position.top}px`,
-          left: `${position.left}px`,
-          transform: 'translateY(-50%)',
-        };
-      case 'left':
-        return {
-          ...baseStyle,
-          top: `${position.top}px`,
-          left: `${position.left}px`,
-          transform: 'translateY(-50%)',
-        };
+    // Desktop: fixed positioning so coordinates map directly to viewport
+    const base: React.CSSProperties = { position: 'fixed', zIndex: 9999, top: `${position.top}px` };
+
+    if (step.position === 'bottom' || step.position === 'top') {
+      return { ...base, left: `${position.left}px`, transform: 'translateX(-50%)' };
     }
+    // left / right — top already accounts for centering
+    return { ...base, left: `${position.left}px` };
   };
 
   return (
@@ -300,7 +257,7 @@ export default function OnboardingTour({ steps, isActive, onComplete, onSkip, on
         .tour-highlight {
           position: relative;
           z-index: 9999;
-          box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.6), 0 0 20px 8px rgba(59, 130, 246, 0.3) !important;
+          box-shadow: 0 0 0 4px rgba(255, 42, 84, 0.55), 0 0 20px 8px rgba(255, 155, 0, 0.25) !important;
           border-radius: 8px;
           background-color: white;
         }

@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState, useRef } from 'react';
 import { useAuthStore } from '../store/auth';
 import { fetchKnowledgeSources } from '../api/client';
-import { CheckCircle, Github, Star } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 
 export default function LandingPage(): JSX.Element {
   const { user } = useAuthStore();
@@ -13,16 +13,6 @@ export default function LandingPage(): JSX.Element {
   const [showResumePreview, setShowResumePreview] = useState(false);
   const [showCoverLetterPreview, setShowCoverLetterPreview] = useState(false);
   const [showAddSourceSuccess, setShowAddSourceSuccess] = useState(false);
-  const [githubStars, setGithubStars] = useState<number | null>(null);
-  
-  // Fetch GitHub stars
-  useEffect(() => {
-    fetch('https://api.github.com/repos/eaziym/cto')
-      .then(res => res.json())
-      .then(data => setGithubStars(data.stargazers_count))
-      .catch(() => setGithubStars(null));
-  }, []);
-  
   // Intersection Observer for fade-in animations
   useEffect(() => {
     const observerOptions = {
@@ -105,10 +95,7 @@ export default function LandingPage(): JSX.Element {
           {/* Left Column - Content */}
           <div className="fade-in-section fade-in-visible">{/* Hero starts visible */}
             <div className="flex items-center gap-2 mb-4">
-              <img src="/android-chrome-192x192.png" alt="CTO Logo" className="w-8 h-8" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-900">
-                Your personal Chief Talent Officer
-              </p>
+              <img src="/linkedme-full.svg" alt="LinkedMe" className="h-8 w-auto" />
             </div>
             <h1 className="mt-4 text-3xl font-bold text-slate-900 sm:text-4xl lg:text-5xl">
               A platform that actually gets you
@@ -627,7 +614,7 @@ export default function LandingPage(): JSX.Element {
       {/* Clean CTA Section */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 text-center fade-in-section">
         <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-8">
-          Get Started with Your CTO
+          Get Started with LinkedMe
         </h2>
         {user ? (
           <Link
@@ -657,25 +644,9 @@ export default function LandingPage(): JSX.Element {
             <Link to="/terms" className="hover:text-brand-600 transition-colors">
               Terms of Service
             </Link>
-            <span className="hidden sm:inline text-gray-400">•</span>
-            <a
-              href="https://github.com/eaziym/cto"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 hover:text-brand-600 transition-colors"
-            >
-              <Github className="w-4 h-4" />
-              <span>GitHub</span>
-              {githubStars !== null && githubStars > 0 && (
-                <span className="flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded-full text-xs font-semibold">
-                  <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                  {githubStars}
-                </span>
-              )}
-            </a>
           </div>
           <div className="text-center mt-4 text-xs text-gray-500">
-            © {new Date().getFullYear()} CTO — Your Personal Chief Talent Officer. All rights reserved.
+            © {new Date().getFullYear()} LinkedMe. All rights reserved.
           </div>
         </div>
       </footer>

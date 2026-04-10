@@ -176,7 +176,7 @@ export default function JobDetailPage(): JSX.Element {
     setActiveModal('materials');
   };  if (!id) {
     return (
-      <div className="flex flex-col bg-slate-50" style={{height: 'calc(100vh - 120px)'}}>
+      <div className="flex flex-col">
         <div className="flex-1 flex items-center justify-center">
           <p className="text-sm text-red-500">Job not found.</p>
         </div>
@@ -186,7 +186,7 @@ export default function JobDetailPage(): JSX.Element {
 
   if (isLoading || !data) {
     return (
-      <div className="flex flex-col bg-slate-50" style={{height: 'calc(100vh - 120px)'}}>
+      <div className="flex flex-col">
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
             <div className="space-y-6 animate-pulse">
@@ -516,7 +516,7 @@ export default function JobDetailPage(): JSX.Element {
   const currentVerdict = (verdictOverride ?? data.epIndicator ?? 'Borderline') as CompassScore['verdict'];
 
   return (
-    <div className="flex flex-col bg-slate-50" style={{height: 'calc(100vh - 120px)'}}>
+    <div className="flex flex-col">
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           {/* Modals */}

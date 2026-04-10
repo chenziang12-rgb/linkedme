@@ -1,9 +1,9 @@
 {
-  "name": "cto-web",
+  "name": "linkedme-web",
   "private": true,
   "type": "module",
   "version": "0.1.0",
-  "description": "CTO web client – Vite + React front-end for the unified knowledge-base experience.",
+  "description": "LinkedMe web client – Vite + React front-end for the unified knowledge-base experience.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

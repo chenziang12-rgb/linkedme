@@ -47,75 +47,13 @@ export default function DashboardPage(): JSX.Element {
     loadData();
   }, [navigate]);
 
-  // Filter and sort jobs by preferences
+  // Sort jobs by RAG semantic score from backend, take top 10
   const topJobs = useMemo(() => {
-    if (!data?.items || !preferences) return data?.items.slice(0, 10) || [];
-
-    const confirmedIndustries = preferences.confirmed_industries || [];
-    const confirmedRoles = preferences.confirmed_roles || [];
-    const confirmedCompanies = preferences.confirmed_companies || [];
-
-    // If no preferences selected, just return top 10
-    if (confirmedIndustries.length === 0 && confirmedRoles.length === 0 && confirmedCompanies.length === 0) {
-      return data.items.slice(0, 10);
-    }
-
-    // Filter jobs that match preferences
-    const jobsWithMatches = data.items.map((job) => {
-      let matchCount = 0;
-
-      // Check role match (bidirectional)
-      if (confirmedRoles.some((role) => {
-        const roleLower = role.toLowerCase();
-        const titleLower = job.title.toLowerCase();
-        return titleLower.includes(roleLower) || roleLower.includes(titleLower);
-      })) {
-        matchCount++;
-      }
-
-      // Check company match (bidirectional)
-      if (confirmedCompanies.some((company) => {
-        const companyLower = company.toLowerCase();
-        const jobCompanyLower = job.company.toLowerCase();
-        return jobCompanyLower.includes(companyLower) || companyLower.includes(jobCompanyLower);
-      })) {
-        matchCount++;
-      }
-
-      // Check industry match (avoid double counting)
-      const hasIndustryMatch = confirmedIndustries.some((industry) => {
-        const industryLower = industry.toLowerCase();
-        
-        // Check in requirements/tags
-        if (job.requirements?.some((tag: string) => {
-          const tagLower = tag.toLowerCase();
-          return tagLower.includes(industryLower) || industryLower.includes(tagLower);
-        })) {
-          return true;
-        }
-        
-        // Check in industry field
-        if (job.industry) {
-          const jobIndustryLower = job.industry.toLowerCase();
-          return jobIndustryLower.includes(industryLower) || industryLower.includes(jobIndustryLower);
-        }
-        
-        return false;
-      });
-
-      if (hasIndustryMatch) {
-        matchCount++;
-      }
-
-      return { job, matchCount };
-    });
-
-    // Sort by match count (highest first), then take top 10
-    return jobsWithMatches
-      .sort((a, b) => b.matchCount - a.matchCount)
-      .slice(0, 10)
-      .map(({ job }) => job);
-  }, [data, preferences]);
+    if (!data?.items) return [];
+    return [...data.items]
+      .sort((a, b) => (b.semanticScore ?? 0) - (a.semanticScore ?? 0))
+      .slice(0, 10);
+  }, [data]);
 
   if (loadingSources) {
     return (

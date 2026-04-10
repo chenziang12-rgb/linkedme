@@ -27,11 +27,8 @@ export default function LoginPage(): JSX.Element {
       <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-lg">
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <img src="/android-chrome-192x192.png" alt="CTO" className="w-16 h-16" />
+            <img src="/linkedme-full.svg" alt="LinkedMe" className="h-14 w-auto" />
           </div>
-          <p className="mt-2 text-sm text-slate-900">
-            Your Personal Chief Talent Officer
-          </p>
           <p className="mt-3 text-xs text-slate-500">
             Sign in to access context-aware job matching and personalized career materials
           </p>

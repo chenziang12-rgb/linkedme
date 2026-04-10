@@ -16,7 +16,7 @@ export default function PrivacyPolicy(): JSX.Element {
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-slate-900 mb-3">1. Introduction</h2>
               <p className="text-slate-600 mb-4">
-                CTO ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our service.
+                LinkedMe ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our service.
               </p>
             </section>
 

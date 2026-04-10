@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide covers deploying the CTO application to production using Docker and a reverse proxy.
+This guide covers deploying the LinkedMe application to production using Docker and a reverse proxy.
 
 ## Quick Start (TL;DR)
 

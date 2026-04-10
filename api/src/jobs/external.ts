@@ -1,4 +1,5 @@
 import { logger } from '../logger.js';
+import { generateEmbeddingsBatch, cosineSimilarity } from '../embeddings.js';
 
 export interface ExternalJob {
   c: string; // company
@@ -18,12 +19,31 @@ export interface NormalizedJob {
   date: string;
   tags: string[];
   industry?: string;
+  embedding?: number[];
 }
 
 const JOBS_API_URL = 'https://eaziym.github.io/sg-jobs/data/jobs.min.json';
 let cachedJobs: NormalizedJob[] | null = null;
 let cacheTimestamp: number = 0;
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+let embeddingsReady = false;
+
+async function embedJobsInBackground(jobs: NormalizedJob[]): Promise<void> {
+  try {
+    logger.info(`Generating RAG embeddings for ${jobs.length} jobs`);
+    const texts = jobs.map((j) => `${j.title} ${j.company} ${j.tags.join(' ')}`);
+    const embeddings = await generateEmbeddingsBatch(texts);
+    jobs.forEach((job, i) => { job.embedding = embeddings[i]; });
+    embeddingsReady = true;
+    logger.info('Job embeddings ready — semantic search active');
+  } catch (err) {
+    logger.error({ err }, 'Failed to generate job embeddings, falling back to keyword search');
+  }
+}
+
+export function areJobEmbeddingsReady(): boolean {
+  return embeddingsReady;
+}
 
 /**
  * Fetch jobs from external API with caching
@@ -162,8 +182,12 @@ export async function fetchExternalJobs(): Promise<NormalizedJob[]> {
     });
     
     cacheTimestamp = now;
+    embeddingsReady = false;
     logger.info(`Fetched and cached ${cachedJobs.length} jobs from external API`);
-    
+
+    // Generate embeddings in background so first response isn't delayed
+    void embedJobsInBackground(cachedJobs);
+
     return cachedJobs;
   } catch (error) {
     logger.error({ err: error }, 'Failed to fetch external jobs');
@@ -202,12 +226,15 @@ function inferIndustry(tags: string[]): string | undefined {
 }
 
 /**
- * Filter jobs based on criteria
+ * Filter jobs based on criteria.
+ * When searchEmbedding is provided (and jobs have embeddings), uses semantic
+ * cosine-similarity ranking instead of substring matching.
  */
 export function filterJobs(
   jobs: NormalizedJob[],
   filters: {
     search?: string;
+    searchEmbedding?: number[];
     location?: string;
     industry?: string;
     tags?: string;
@@ -217,15 +244,23 @@ export function filterJobs(
 ): NormalizedJob[] {
   let filtered = [...jobs];
 
-  // Search filter (title, company, or tags)
+  // Search filter — semantic when embeddings are ready, keyword fallback otherwise
   if (filters.search) {
-    const searchLower = filters.search.toLowerCase();
-    filtered = filtered.filter(
-      job =>
-        job.title.toLowerCase().includes(searchLower) ||
-        job.company.toLowerCase().includes(searchLower) ||
-        job.tags.some(tag => tag.toLowerCase().includes(searchLower))
-    );
+    if (filters.searchEmbedding && filtered.some((j) => j.embedding)) {
+      filtered = filtered
+        .map((j) => ({ j, score: j.embedding ? cosineSimilarity(filters.searchEmbedding!, j.embedding) : 0 }))
+        .filter(({ score }) => score > 0.25)
+        .sort((a, b) => b.score - a.score)
+        .map(({ j }) => j);
+    } else {
+      const term = filters.search.toLowerCase();
+      filtered = filtered.filter(
+        (job) =>
+          job.title.toLowerCase().includes(term) ||
+          job.company.toLowerCase().includes(term) ||
+          job.tags.some((tag) => tag.toLowerCase().includes(term))
+      );
+    }
   }
 
   // Location filter
