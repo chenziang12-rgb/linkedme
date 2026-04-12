@@ -370,6 +370,10 @@ export function updateApplication(id: string, updates: { status?: string; notes?
   });
 }
 
+export function deleteApplication(id: string): Promise<{ message: string }> {
+  return apiFetch(`/applications/${id}`, { method: 'DELETE' });
+}
+
 export function fetchPlans(): Promise<{ items: Array<{ id: string; label: string; price: number }>; gating: Record<string, boolean> }> {
   return apiFetch('/plans', { method: 'GET' });
 }
@@ -573,6 +577,10 @@ export function updateAggregatedProfile(updates: Partial<AggregatedProfile>): Pr
     method: 'PATCH',
     body: JSON.stringify(updates),
   });
+}
+
+export function deleteAggregatedProfile(): Promise<{ message: string }> {
+  return apiFetch('/knowledge-sources/aggregate', { method: 'DELETE' });
 }
 
 export function uploadKnowledgeDocument(file: File): Promise<{ source: KnowledgeSource; message: string }> {

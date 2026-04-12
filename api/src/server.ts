@@ -1039,6 +1039,29 @@ export async function buildServer(): Promise<express.Express> {
     }
   });
 
+  router.delete('/applications/:id', requireAuth, async (req, res, next) => {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('applications')
+        .delete()
+        .eq('id', req.params.id)
+        .eq('user_id', req.user!.id)
+        .select()
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+
+      if (!data) {
+        res.status(404).json({ error: 'not_found', message: 'Application not found' });
+        return;
+      }
+
+      res.json({ message: 'Application deleted successfully' });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // ============================================================================
   // RESUME ANALYSIS ENDPOINTS
   // ============================================================================

@@ -7,6 +7,8 @@ import {
   predictPreferences,
   updateUserPreferences,
   fetchAggregatedProfile,
+  deleteAggregatedProfile,
+  deleteUserPreferences,
   type KnowledgeSource,
   type UserPreferences,
   type AggregatedProfile,
@@ -257,32 +259,7 @@ export default function KnowledgeBasePage() {
       console.log(`[AGGREGATION] Completed sources changed: ${completedSourcesCount} → ${currentCompletedCount}`);
       setCompletedSourcesCount(currentCompletedCount);
       
-      // If only 1 source, just use its parsed data directly without aggregation
-      if (currentCompletedCount === 1) {
-        const completedSource = sources.find(s => s.processing_status === 'completed');
-        if (completedSource?.parsed_data) {
-          console.log('[AGGREGATION] Single source detected, using parsed data directly');
-          const profile = {
-            ...completedSource.parsed_data,
-            sources: [{
-              type: completedSource.source_type,
-              identifier: completedSource.source_identifier,
-              created_at: completedSource.created_at,
-            }],
-            updated_at: completedSource.updated_at,
-          };
-          setAggregatedProfile(profile);
-          
-          // Reload profile from DB to update skills and unlock navigation
-          loadProfileFromDB().catch(err => {
-            console.error('[AGGREGATION] Failed to reload profile:', err);
-          });
-        }
-        return;
-      }
-      
-      // Multiple sources - run streaming aggregation
-      console.log(`[AGGREGATION] Multiple sources (${currentCompletedCount}), starting streaming aggregation...`);
+      console.log(`[AGGREGATION] Running streaming aggregation for ${currentCompletedCount} source(s)...`);
       aggregate(
         (profile) => {
           console.log('✅ Aggregation complete!', profile);
@@ -307,11 +284,23 @@ export default function KnowledgeBasePage() {
   const loadData = async (skipCountInit = false) => {
     setIsLoading(true);
     try {
-      const [sourcesData, prefsData, aggregatedData] = await Promise.all([
+      let [sourcesData, prefsData, aggregatedData] = await Promise.all([
         fetchKnowledgeSources(),
         fetchUserPreferences(),
         fetchAggregatedProfile(),
       ]);
+
+      // Self-heal: if there are no sources but the DB still has an aggregated
+      // profile or preferences left over from a previous session, clear them.
+      if (sourcesData.sources.length === 0 && (aggregatedData.aggregated_profile || prefsData.preferences)) {
+        console.log('[LOAD] Detected orphan profile/preferences with 0 sources, clearing...');
+        await Promise.all([
+          deleteAggregatedProfile().catch((err) => console.warn('Failed to clear aggregated profile', err)),
+          deleteUserPreferences().catch((err) => console.warn('Failed to clear preferences', err)),
+        ]);
+        aggregatedData = { aggregated_profile: null };
+        prefsData = { preferences: null };
+      }
 
       // Check for multiple resume sources and keep only the latest
       const resumeSources = sourcesData.sources.filter((s) => s.source_type === 'resume');
@@ -406,7 +395,20 @@ export default function KnowledgeBasePage() {
 
     try {
       await deleteKnowledgeSource(id);
-      setSources(sources.filter((s) => s.id !== id));
+      const remaining = sources.filter((s) => s.id !== id);
+      setSources(remaining);
+
+      const remainingCompleted = remaining.filter((s) => s.processing_status === 'completed').length;
+      if (remainingCompleted === 0) {
+        await Promise.all([
+          deleteAggregatedProfile().catch((err) => console.warn('Failed to clear aggregated profile', err)),
+          deleteUserPreferences().catch((err) => console.warn('Failed to clear preferences', err)),
+        ]);
+        setAggregatedProfile(null);
+        setPreferences(null);
+        setCompletedSourcesCount(0);
+        loadProfileFromDB().catch((err) => console.warn('Failed to reload profile after clear', err));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete source');
     }

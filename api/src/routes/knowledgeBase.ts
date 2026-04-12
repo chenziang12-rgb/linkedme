@@ -527,6 +527,37 @@ router.post('/text', requireAuth, async (req: Request, res: Response) => {
 });
 
 // ============================================================================
+// DELETE /api/knowledge-sources/aggregate
+// Clear the aggregated unified profile (used when all sources are removed)
+// ============================================================================
+
+router.delete('/aggregate', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+
+    const { error } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        knowledge_base_summary: null,
+        knowledge_base_updated_at: null,
+        skills: [],
+      })
+      .eq('id', userId);
+
+    if (error) throw error;
+
+    logger.info(`[DELETE AGGREGATE] Cleared aggregated profile for user ${userId}`);
+    res.json({ message: 'Aggregated profile cleared successfully' });
+  } catch (error) {
+    logger.error('Failed to clear aggregated profile:', error);
+    res.status(500).json({
+      error: 'Failed to clear aggregated profile',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// ============================================================================
 // DELETE /api/knowledge-sources/:id
 // Delete a knowledge source
 // ============================================================================

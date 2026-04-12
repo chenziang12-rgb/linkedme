@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { fetchApplications } from '../api/client';
+import { Trash2 } from 'lucide-react';
+import { fetchApplications, deleteApplication } from '../api/client';
 import EmptyState from '../components/EmptyState';
 import { useProfileStore } from '../store/profile';
 
@@ -10,6 +11,21 @@ export default function ApplicationsPage(): JSX.Element {
   const applications = useProfileStore((state) => state.applications);
   const setApplications = useProfileStore((state) => state.setApplications);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Remove this application from your tracker? This cannot be undone.')) return;
+    setDeletingId(id);
+    try {
+      await deleteApplication(id);
+      setApplications(applications.filter((a) => a.id !== id));
+    } catch (err) {
+      console.error('Failed to delete application', err);
+      alert('Failed to delete application. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   // Redirect to knowledge base if no profile (no longer use /assessment)
   useEffect(() => {
@@ -158,6 +174,16 @@ export default function ApplicationsPage(): JSX.Element {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(application.id)}
+                        disabled={deletingId === application.id}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-red-600 disabled:opacity-50"
+                        title="Remove from tracker"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        {deletingId === application.id ? 'Removing…' : 'Remove'}
+                      </button>
                     </div>
                   </div>
                 </div>
