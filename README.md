@@ -21,7 +21,7 @@ Under the hood, a Vite/React frontend (`/web`) talks to an Express + TypeScript 
 | Database + Auth | Supabase (Postgres with RLS, Google OAuth via PKCE) |
 | Serverless compute | Supabase Edge Functions (Deno runtime, SSE streaming) |
 | LLM | OpenAI — `gpt-4o` (aggregation), `gpt-4o-mini` (parsing, cover letters, HR outreach, preferences), `gpt-4.1-mini` (resume analysis, fit scoring) |
-| Embeddings | `text-embedding-3-small` (1536-dim) — in-memory job vectors + per-request profile/query vectors |
+| Embeddings | `text-embedding-3-small` (1536-dim) — job vectors (in-memory) + knowledge source vectors, profile vector, and generated material vectors (persisted in Supabase) |
 | Scraping | Apify (`apimaestro~linkedin-profile-detail`, GitHub), Cheerio (websites) |
 | Jobs feed | Static JSON from [sg-jobs](https://eaziym.github.io/sg-jobs/data/jobs.min.json) (~4700 Singapore job listings), 1h cache |
 
@@ -29,7 +29,8 @@ Under the hood, a Vite/React frontend (`/web`) talks to an Express + TypeScript 
 
 | Path | Description |
 | --- | --- |
-| `/api` | Express service — resume parsing pipeline, fit scoring engine, Supabase integration, embeddings, automated tests |
+| `/api` | Express service — resume parsing pipeline, fit scoring engine, Supabase integration, embeddings, RAG retrieval, automated tests |
+| `/api/resources/llm_prompts` | All 9 LLM prompt files (see [LLM Prompts](#llm-prompts)) |
 | `/web` | Vite + React frontend — Tailwind UI, Zustand profile store, React Query networking, streaming hooks |
 | `/supabase/functions` | Edge Functions: `parse-resume-stream`, `parse-linkedin-stream`, `parse-github-stream`, `parse-project-stream`, `aggregate-profile-stream` |
 | `/supabase/migrations` | SQL migrations for Supabase schema |
@@ -40,12 +41,12 @@ Under the hood, a Vite/React frontend (`/web`) talks to an Express + TypeScript 
 
 | Table | Purpose |
 | --- | --- |
-| `profiles` | User profiles with `knowledge_base_summary` (JSONB), skills array, COMPASS scores |
-| `knowledge_sources` | Individual parsed sources (resume, LinkedIn, GitHub, etc.) per user |
+| `profiles` | User profiles with `knowledge_base_summary` (JSONB), skills array, COMPASS scores, `profile_embedding` (float8[]) |
+| `knowledge_sources` | Individual parsed sources (resume, LinkedIn, GitHub, etc.) per user, `embedding` (float8[]) per source |
 | `user_preferences` | Predicted and confirmed industries, roles, companies with confidence scores |
 | `applications` | Job application tracker (status: draft → sent → interview → offer/rejected) |
 | `job_assessments` | Cached LLM fit analyses per (user, job) pair |
-| `generated_materials` | Cached tailored resumes and cover letters per (user, job) pair |
+| `generated_materials` | Cached tailored resumes and cover letters per (user, job) pair, `embedding` (float8[]) |
 | `resume_analyses` | History of resume uploads and parsing results |
 | `compass_scores` | COMPASS score calculation history with breakdowns |
 | `saved_jobs` | Job-user match scores (cached) |
@@ -190,13 +191,62 @@ Upload resumes, link profiles, or add project documents. Each source is processe
 When completed sources change, the `aggregate-profile-stream` edge function merges all sources using gpt-4o into a single unified profile — deduplicating skills, merging overlapping experience entries, and normalizing formats. The result is upserted into `profiles.knowledge_base_summary`.
 
 ### 3. Semantic job matching
-On API boot, all ~4700 jobs are batch-embedded (`title + company + tags`) via `text-embedding-3-small`. When a user browses jobs, their profile (skills + confirmed preferences) is embedded and jobs are ranked by cosine similarity. Search queries are also embedded for semantic search.
+On API boot, all ~4700 jobs are batch-embedded (`title + company + tags`) via `text-embedding-3-small`. When a user browses jobs, the API fetches their stored `profile_embedding` from `profiles` (a 1536-dim vector of the full aggregated knowledge base text) and ranks jobs by cosine similarity. Falls back to a prefs+skills string embedding for users whose profile hasn't been embedded yet. Search queries are also embedded for semantic search.
 
-### 4. Fit analysis
-Clicking "Analyze fit" on a job detail page sends the user's unified profile + the scraped JD to `gpt-4.1-mini` via OpenAI's Responses API with Zod-derived structured output. Returns: overall score, must-have coverage, subscores, evidence, gaps, interview questions, and recommendations. Results are cached per (user, job).
+### 4. Fit analysis (RAG pipeline)
+Clicking "Analyze fit" triggers a full RAG retrieval before the LLM call:
+1. The fetched job description is embedded
+2. All user knowledge sources with stored embeddings are loaded from the DB
+3. Sources are ranked by cosine similarity to the JD; the top-2 most relevant are retrieved
+4. The retrieved source context is injected into the `gpt-4.1-mini` prompt alongside the aggregated profile
+5. Returns: overall score, must-have coverage, 7 subscores, evidence, gaps, interview questions, and recommendations. Results cached per (user, job).
 
 ### 5. Asset generation
-Tailored resumes and cover letters are generated per-job using the unified profile + JD context. Cover letters support tone selection (formal/professional/enthusiastic). Generated materials are cached and editable.
+Tailored resumes and cover letters are generated per-job using the unified profile + JD context. Cover letters support tone selection (formal/professional/enthusiastic). Generated materials are embedded and cached, editable post-generation.
+
+## LLM Prompts
+
+All prompts live in `/api/resources/llm_prompts/`. Each was designed with chain-of-thought reasoning, explicit evidence hierarchies, and anti-pattern constraints.
+
+| File | Model | Purpose |
+| --- | --- | --- |
+| `extract_resume_info.txt` | `gpt-4o-mini` | Parse resume PDF/DOCX into structured `ParsedKnowledgeData`. Field-by-field extraction rules, normalisation mappings, edge case handling. |
+| `extract_project_info.txt` | `gpt-4o-mini` | Parse project documents. Classifies document type first (project report vs internship report) before extracting. |
+| `aggregate_profile.txt` | `gpt-4o-mini` | Merge multiple sources into one unified profile. 7-step process: identity → experience merge → education merge → skill dedup → projects/certs → summary synthesis → self-check. |
+| `predict_preferences.txt` | `gpt-4o-mini` | Predict industries, roles, and companies from the knowledge base. Evidence-anchored confidence scoring (≥0.65 threshold). Singapore market-aware. |
+| `profile_jd_score_system.txt` | `gpt-4.1-mini` | Score candidate fit against a job description. 6-level evidence hierarchy; explicit instruction to use RAG-retrieved source context. 7 weighted subscores. |
+| `profile_jd_score_user.txt` | `gpt-4.1-mini` | User-turn template for fit scoring (role, industry, salary, requirements, JD). Candidate profile and RAG context appended in code. |
+| `compass_scoring.txt` | `gpt-4.1-mini` | Calculate Singapore Employment Pass COMPASS score. Explicit step-by-step calculation; score breakpoint enforcement; sector benchmark table. |
+| `generate_resume.txt` | `gpt-4o-mini` | Generate ATS-optimised tailored resume. Seniority-aware structure (fresh grad / mid / senior). Keyword mirroring, quantification rules, action verb bank. |
+| `generate_cover_letter.txt` | `gpt-4o-mini` | Generate personalised cover letter. 4-paragraph formula with hook, 2 proof points, close. Tone-adaptive (formal/professional/enthusiastic). Anti-pattern blacklist. |
+
+## RAG Architecture
+
+LinkedMe uses a tiered embedding strategy across three document types, all using `text-embedding-3-small` (1536-dim):
+
+```
+Source upload / aggregation
+      │
+      ├─ knowledge_sources.embedding     ← text of parsed source (skills + experience + projects)
+      ├─ profiles.profile_embedding      ← text of full aggregated knowledge base
+      └─ generated_materials.embedding   ← text of generated resume or cover letter
+
+Job browse
+      │
+      └─ profile_embedding (from DB) vs job embeddings (in-memory)
+            → cosine similarity → semanticScore per job → sorted ranking
+
+Job analysis (/jobs/:id/analyze)
+      │
+      ├─ Embed job description
+      ├─ Load user knowledge_sources with embeddings from DB
+      ├─ Rank by cosine similarity to JD
+      ├─ Retrieve top-2 most relevant sources
+      └─ Inject as RETRIEVED SOURCE CONTEXT into LLM prompt
+            → gpt-4.1-mini receives both aggregated profile + retrieved granular evidence
+```
+
+Embeddings are generated fire-and-forget after each processing event — they do not block the user-facing response.
 
 ## Deployment
 
