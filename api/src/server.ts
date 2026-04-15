@@ -22,7 +22,7 @@ import type { AssessmentInput, PlanTier, User } from './types.js';
 import { requireAuth, optionalAuth } from './middleware/auth.js';
 import { supabaseAdmin } from './supabase.js';
 import { fetchExternalJobs, filterJobs, areJobEmbeddingsReady } from './jobs/external.js';
-import { generateEmbedding, cosineSimilarity } from './embeddings.js';
+import { generateEmbedding, cosineSimilarity, parsedDataToText } from './embeddings.js';
 import { getMatchingJD } from './jobs/mockJDs.js';
 import { fetchJobDescription, isInternSGCompany } from './jobs/jdFetcher.js';
 
@@ -411,14 +411,21 @@ export async function buildServer(): Promise<express.Express> {
       // Fetch user profile + preferences if authenticated
       let userSkills: string[] = [];
       let userPreferences: { confirmed_industries?: string[]; confirmed_roles?: string[]; confirmed_companies?: string[] } | null = null;
+      let profileEmbedding: number[] | undefined;
 
       if (req.user) {
         const { data: profileData } = await supabaseAdmin
           .from('profiles')
-          .select('skills')
+          .select('skills, profile_embedding')
           .eq('id', req.user.id)
           .single();
-        if (profileData) userSkills = profileData.skills || [];
+        if (profileData) {
+          userSkills = profileData.skills || [];
+          // Use stored rich profile embedding when available
+          if (profileData.profile_embedding && areJobEmbeddingsReady()) {
+            profileEmbedding = profileData.profile_embedding as number[];
+          }
+        }
 
         const { data: prefsData } = await supabaseAdmin
           .from('user_preferences')
@@ -429,8 +436,8 @@ export async function buildServer(): Promise<express.Express> {
       }
 
       // Build profile embedding for semantic preference scoring
-      let profileEmbedding: number[] | undefined;
-      if (userPreferences && areJobEmbeddingsReady()) {
+      // Falls back to a prefs+skills string if no stored embedding exists yet
+      if (!profileEmbedding && userPreferences && areJobEmbeddingsReady()) {
         const parts = [
           userPreferences.confirmed_roles?.length ? `Roles: ${userPreferences.confirmed_roles.join(', ')}` : '',
           userPreferences.confirmed_industries?.length ? `Industries: ${userPreferences.confirmed_industries.join(', ')}` : '',
@@ -688,6 +695,39 @@ export async function buildServer(): Promise<express.Express> {
       const jdData = await fetchJobDescription(job.url, job.company);
       const jobDescription = jdData?.jdText || `${job.title} at ${job.company}. Location: ${job.location}. Tags: ${job.tags.join(', ')}`;
 
+      // RAG: embed the JD and retrieve the most relevant knowledge sources
+      let ragContext = '';
+      try {
+        const jdEmbedding = await generateEmbedding(jobDescription.slice(0, 8000));
+        const { data: sourcesWithEmbeddings } = await supabaseAdmin
+          .from('knowledge_sources')
+          .select('id, source_type, parsed_data, embedding')
+          .eq('user_id', req.user!.id)
+          .eq('processing_status', 'completed')
+          .not('embedding', 'is', null);
+
+        if (sourcesWithEmbeddings?.length) {
+          const ranked = sourcesWithEmbeddings
+            .map((s) => ({
+              source_type: s.source_type as string,
+              parsed_data: s.parsed_data,
+              score: cosineSimilarity(jdEmbedding, s.embedding as number[]),
+            }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 2); // top-2 most relevant sources
+
+          ragContext = ranked
+            .map((s) => {
+              const text = parsedDataToText(s.parsed_data as any, s.source_type);
+              return `[Source: ${s.source_type} | relevance: ${(s.score * 100).toFixed(0)}%]\n${text}`;
+            })
+            .join('\n\n---\n\n');
+          logger.info({ jobId: req.params.id, sources: ranked.length }, 'RAG: retrieved relevant sources for analysis');
+        }
+      } catch (err) {
+        logger.warn({ err }, 'RAG retrieval failed, using aggregated profile only');
+      }
+
       // Create role template for comprehensive LLM scorer
       const roleTemplate: RoleTemplate = {
         title: jdData?.title || job.title,
@@ -744,6 +784,11 @@ export async function buildServer(): Promise<express.Express> {
         user_prompt += `\nProjects:\n${knowledgeBase.projects.map((p: any) => 
           `- ${p.name}: ${p.description}`
         ).join('\n')}\n`;
+      }
+
+      // Inject RAG-retrieved source context into the prompt
+      if (ragContext) {
+        user_prompt += '\n\n# RETRIEVED SOURCE CONTEXT (most relevant to this job)\n\n' + ragContext;
       }
 
       // Import ProfileSchema from llm_scorer

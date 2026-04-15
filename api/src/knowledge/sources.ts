@@ -2,6 +2,7 @@
 
 import { supabaseAdmin } from '../supabase.js';
 import { logger } from '../logger.js';
+import { generateEmbedding, parsedDataToText } from '../embeddings.js';
 import type { KnowledgeSource, KnowledgeSourceType, ParsedKnowledgeData } from './types.js';
 
 export async function createKnowledgeSource(
@@ -40,6 +41,12 @@ export async function createKnowledgeSource(
   }
   
   logger.info(`Created knowledge source: ${sourceType} for user ${userId}`);
+
+  // Fire-and-forget: embed the source content for downstream RAG retrieval
+  embedKnowledgeSource(data.id, parsedData).catch((err) =>
+    logger.warn({ err, sourceId: data.id }, 'Failed to generate knowledge source embedding')
+  );
+
   return data;
 }
 
@@ -165,7 +172,7 @@ export async function markSourceAsProcessing(id: string): Promise<void> {
     .eq('id', id);
 }
 
-// Mark source as completed with data
+// Mark source as completed with data, then generate embedding asynchronously
 export async function markSourceAsCompleted(
   id: string,
   parsedData: ParsedKnowledgeData,
@@ -179,6 +186,19 @@ export async function markSourceAsCompleted(
       raw_content: rawContent,
     })
     .eq('id', id);
+
+  // Fire-and-forget: embed the source content for downstream RAG retrieval
+  embedKnowledgeSource(id, parsedData).catch((err) =>
+    logger.warn({ err, sourceId: id }, 'Failed to generate knowledge source embedding')
+  );
+}
+
+async function embedKnowledgeSource(id: string, parsedData: ParsedKnowledgeData): Promise<void> {
+  const text = parsedDataToText(parsedData);
+  if (!text.trim()) return;
+  const embedding = await generateEmbedding(text);
+  await supabaseAdmin.from('knowledge_sources').update({ embedding }).eq('id', id);
+  logger.info({ sourceId: id }, 'Knowledge source embedding stored');
 }
 
 // Mark source as failed

@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { logger } from '../logger.js';
 import { supabaseAdmin } from '../supabase.js';
 import { aggregateKnowledgeBase, type AggregatedKnowledgeBase } from '../knowledge/aggregator.js';
+import { generateEmbedding } from '../embeddings.js';
 import { generateResume, type JobInfo } from '../ai/resume_generator.js';
 import { generateCoverLetter } from '../ai/cover_letter_generator.js';
 import { fetchExternalJobs } from '../jobs/external.js';
@@ -81,6 +82,12 @@ async function getUserKnowledgeBase(userId: string): Promise<AggregatedKnowledge
 // ============================================================================
 // Helper: Fetch job details from database or external API
 // ============================================================================
+
+async function embedMaterial(id: string, content: string): Promise<void> {
+  const embedding = await generateEmbedding(content);
+  await supabaseAdmin.from('generated_materials').update({ embedding }).eq('id', id);
+  logger.info({ materialId: id }, 'Generated material embedding stored');
+}
 
 async function getJobDetails(jobId: string): Promise<JobInfo | null> {
   logger.info(`Fetching job details for job ${jobId}`);
@@ -211,7 +218,14 @@ router.post('/resume/:jobId', requireAuth, async (req: Request, res: Response) =
       .single();
     
     if (error) throw error;
-    
+
+    // Fire-and-forget: embed the generated resume for future similarity lookups
+    if (material) {
+      embedMaterial(material.id, generatedResume.content).catch((err) =>
+        logger.warn({ err, materialId: material.id }, 'Failed to embed resume')
+      );
+    }
+
     res.json({
       material,
       message: 'Resume generated successfully',
@@ -308,7 +322,14 @@ router.post('/cover-letter/:jobId', requireAuth, async (req: Request, res: Respo
       .single();
     
     if (error) throw error;
-    
+
+    // Fire-and-forget: embed the generated cover letter for future similarity lookups
+    if (material) {
+      embedMaterial(material.id, generatedCoverLetter.content).catch((err) =>
+        logger.warn({ err, materialId: material.id }, 'Failed to embed cover letter')
+      );
+    }
+
     res.json({
       material,
       message: 'Cover letter generated successfully',

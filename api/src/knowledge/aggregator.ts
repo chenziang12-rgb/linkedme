@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../supabase.js';
 import { logger } from '../logger.js';
 import type { ParsedKnowledgeData } from './types.js';
 import { getKnowledgeSources } from './sources.js';
+import { generateEmbedding, knowledgeBaseToText } from '../embeddings.js';
 import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
@@ -333,6 +334,19 @@ export async function saveAggregatedKnowledgeBase(
   }
   
   logger.info(`[SAVE AGGREGATE] ✅ Saved aggregated knowledge base for user ${userId} with ${knowledgeBase.sources?.length || 0} sources and ${uniqueSkills.length} skills at ${timestamp}`);
+
+  // Fire-and-forget: embed the full aggregated profile for richer job ranking
+  embedAggregatedProfile(userId, knowledgeBase).catch((err) =>
+    logger.warn({ err, userId }, 'Failed to generate profile embedding')
+  );
+}
+
+async function embedAggregatedProfile(userId: string, kb: AggregatedKnowledgeBase): Promise<void> {
+  const text = knowledgeBaseToText(kb);
+  if (!text.trim()) return;
+  const embedding = await generateEmbedding(text);
+  await supabaseAdmin.from('profiles').update({ profile_embedding: embedding }).eq('id', userId);
+  logger.info({ userId }, 'Profile embedding stored');
 }
 
 // Get aggregated knowledge base from profile
