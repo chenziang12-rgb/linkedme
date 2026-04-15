@@ -1,9 +1,11 @@
-ROLE_TITLE: {{ role_title }}
-INDUSTRY: {{ industry }}
-BASE_SALARY: {{ base_salary }}
+## JOB DETAILS
 
-JOB_REQUIREMENTS:
+Role: {{ role_title }}
+Industry: {{ industry }}
+Salary Range (SGD/month): {{ base_salary }}
+
+Requirements:
 {{ job_requirements }}
 
-JOB_DESCRIPTION:
+Job Description:
 {{ job_description }}
